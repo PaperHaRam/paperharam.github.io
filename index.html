@@ -364,7 +364,7 @@
         mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
         mediaRecorder.onstop = async () => {
           try {
-            const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+            const blob = new Blob(recChunks, { type: (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : 'audio/webm' });
             const url = URL.createObjectURL(blob);
             recAudio.src = url; recAudio.classList.remove('hidden');
             recStatus.classList.remove('hidden');
@@ -383,6 +383,15 @@
           } catch (e) {
             alert('녹음 파일 처리 오류: ' + e.message);
             console.error(e);
+          } finally {
+            // Cleanup & UI reset after processing
+            if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+            mediaRecorder = null; mediaStream = null;
+            recBtn.textContent = '🎙️ 녹음 시작';
+            recBtn.classList.remove('pulse-ring');
+            if (recTimerId) { clearInterval(recTimerId); recTimerId = null; }
+            recTimer.textContent = '00:00';
+            analyser = null; source = null;
           }
         };
         mediaRecorder.start();
@@ -408,15 +417,9 @@
         console.error(e);
       }
     } else {
-      // stop
-      mediaRecorder.stop();
-      mediaStream.getTracks().forEach(t => t.stop());
-      mediaRecorder = null; mediaStream = null;
-      recBtn.textContent = '🎙️ 녹음 시작';
-      recBtn.classList.remove('pulse-ring');
-      if (recTimerId) { clearInterval(recTimerId); recTimerId = null; }
-      recTimer.textContent = '00:00';
-      analyser = null; source = null;
+      // stop (cleanup will occur in onstop handler)
+      try { mediaRecorder.stop(); } catch (e) { console.warn('stop error:', e); }
+      if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
     }
   });
 
