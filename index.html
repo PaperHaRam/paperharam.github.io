@@ -7,10 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
   <style>
-    .shine {
-      background: linear-gradient(120deg, rgba(255,255,255,0.25), rgba(255,255,255,0.05));
-      backdrop-filter: blur(6px);
-    }
+    .shine { background: linear-gradient(120deg, rgba(255,255,255,0.25), rgba(255,255,255,0.05)); backdrop-filter: blur(6px);} 
     .pulse-ring { box-shadow: 0 0 0 0 rgba(59,130,246,0.7); animation: pulse 2s infinite; }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(59,130,246,0.6);} 70% { box-shadow: 0 0 0 20px rgba(59,130,246,0);} 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0);} }
     .star { filter: drop-shadow(0 4px 10px rgba(0,0,0,0.2)); }
@@ -22,13 +19,10 @@
     <header class="mb-8 text-center">
       <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight">🎮 Voice Match Game</h1>
       <p class="text-slate-300 mt-2">업로드한 참조 음성 vs 브라우저로 녹음한 음성의 <span class="font-semibold">유사도 점수</span>를 게임처럼 확인하세요.</p>
-      <p class="text-xs mt-2 text-slate-400">※ 마이크 사용은 <strong>HTTPS</strong> 환경(예: GitHub Pages, Netlify)에서만 동작합니다. Safari/모바일에서는 형식이 다를 수 있어요.</p>
     </header>
 
     <main class="grid md:grid-cols-2 gap-6">
-      <!-- Left column: Inputs -->
       <section class="space-y-6">
-        <!-- Step 1: Upload reference audio -->
         <div class="shine rounded-2xl p-5 border border-white/10">
           <div class="flex items-center justify-between">
             <h2 class="font-semibold text-lg">1) 참조 음성 업로드</h2>
@@ -38,11 +32,10 @@
             <input id="ref-file" type="file" accept="audio/*" class="block w-full text-sm text-slate-200 file:mr-4 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-4 file:py-2 file:text-sm file:font-semibold hover:file:bg-indigo-500" />
             <audio id="ref-audio" controls class="mt-3 w-full hidden"></audio>
           </div>
-          <button id="analyze-ref" class="mt-4 w-full rounded-xl bg-indigo-600 hover:bg-indigo-500 transition-colors px-4 py-2 font-semibold disabled:opacity-40" disabled>참조 음성 분석</button>
+          <button id="analyze-ref" class="mt-4 w-full rounded-xl bg-indigo-600 hover:bg-indigo-500 transition-colors px-4 py-2 font-semibold disabled:opacity-40">참조 음성 분석</button>
           <p id="ref-meta" class="mt-2 text-xs text-slate-400"></p>
         </div>
 
-        <!-- Step 2: Record live audio -->
         <div class="shine rounded-2xl p-5 border border-white/10">
           <div class="flex items-center justify-between">
             <h2 class="font-semibold text-lg">2) 브라우저로 녹음</h2>
@@ -57,19 +50,15 @@
           <p id="rec-meta" class="mt-2 text-xs text-slate-400"></p>
         </div>
 
-        <!-- Step 3: Compare -->
         <div class="shine rounded-2xl p-5 border border-white/10">
           <h2 class="font-semibold text-lg">3) 비교 · 점수 확인</h2>
           <button id="compare-btn" class="mt-3 w-full rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 transition-colors px-4 py-2 font-semibold disabled:opacity-40" disabled>🔎 유사도 계산</button>
-          <p class="text-xs text-slate-400 mt-2">MFCC + 스펙트럼 지표(centroid, rolloff, flatness, ZCR, RMS) → DTW로 정렬하여 점수화합니다. (학술적 신원확인용 아님)</p>
         </div>
       </section>
 
-      <!-- Right column: Score / Results -->
       <section class="shine rounded-2xl p-6 border border-white/10 flex flex-col">
         <div class="flex-1 grid place-items-center">
           <div class="relative w-64 h-64">
-            <!-- Background circle -->
             <svg viewBox="0 0 200 200" class="absolute inset-0">
               <circle cx="100" cy="100" r="90" stroke="rgba(255,255,255,0.08)" stroke-width="18" fill="none"/>
               <circle id="score-arc" class="score-arc" cx="100" cy="100" r="90" stroke="url(#grad)" stroke-linecap="round" stroke-width="18" stroke-dasharray="565" stroke-dashoffset="565" fill="none"/>
@@ -90,440 +79,31 @@
         </div>
         <div class="mt-4 text-center">
           <div id="rank" class="text-xl font-semibold">대기 중…</div>
-          <div id="stars" class="mt-2 flex items-center justify-center gap-1">
-            <svg class="star w-7 h-7 opacity-30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .587l3.668 7.431 8.2 1.193-5.934 5.787 1.401 8.168L12 18.896l-7.335 3.87 1.401-8.168L.132 9.211l8.2-1.193z"/></svg>
-            <svg class="star w-7 h-7 opacity-30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .587l3.668 7.431 8.2 1.193-5.934 5.787 1.401 8.168L12 18.896l-7.335 3.87 1.401-8.168L.132 9.211l8.2-1.193z"/></svg>
-            <svg class="star w-7 h-7 opacity-30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .587l3.668 7.431 8.2 1.193-5.934 5.787 1.401 8.168L12 18.896l-7.335 3.87 1.401-8.168L.132 9.211l8.2-1.193z"/></svg>
-          </div>
-          <div id="explain" class="text-xs text-slate-400 mt-3 leading-relaxed"></div>
-          <div class="mt-4 flex gap-2 justify-center">
-            <button id="download-json" class="rounded-lg bg-slate-700 hover:bg-slate-600 px-3 py-2 text-sm">결과 JSON 저장</button>
-            <button id="reset-btn" class="rounded-lg bg-slate-700 hover:bg-slate-600 px-3 py-2 text-sm">초기화</button>
-          </div>
+          <div id="stars" class="mt-2 flex items-center justify-center gap-1"></div>
         </div>
       </section>
     </main>
-
-    <footer class="mt-10 text-center text-xs text-slate-400">
-      <p>⚠️ 본 도구는 재미·학습용입니다. 법적·의학적·포렌식 신원확인 용도로 사용하지 마세요.</p>
-    </footer>
   </div>
 
 <script>
-(() => {
-  // --- Utilities ---------------------------------------------------------
-  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-  const fmtTime = (sec) => {
-    sec = Math.max(0, Math.floor(sec));
-    const m = String(Math.floor(sec/60)).padStart(2,'0');
-    const s = String(sec % 60).padStart(2,'0');
-    return `${m}:${s}`;
-  };
+const refFile = document.getElementById('ref-file');
+const analyzeRefBtn = document.getElementById('analyze-ref');
+const refAudio = document.getElementById('ref-audio');
 
-  // Simple linear resampler to target sampleRate (mono)
-  function resampleMono(signal, srcSr, dstSr) {
-    if (srcSr === dstSr) return signal;
-    const ratio = dstSr / srcSr;
-    const newLen = Math.max(1, Math.round(signal.length * ratio));
-    const out = new Float32Array(newLen);
-    for (let i = 0; i < newLen; i++) {
-      const srcIndex = i / ratio;
-      const i0 = Math.floor(srcIndex);
-      const t = srcIndex - i0;
-      const s0 = signal[Math.min(i0, signal.length - 1)];
-      const s1 = signal[Math.min(i0 + 1, signal.length - 1)];
-      out[i] = (1 - t) * s0 + t * s1;
-    }
-    return out;
-  }
-
-  function toMonoFloat32(audioBuffer) {
-    const ch = audioBuffer.numberOfChannels;
-    const len = audioBuffer.length;
-    if (ch === 1) return audioBuffer.getChannelData(0).slice();
-    const out = new Float32Array(len);
-    for (let c = 0; c < ch; c++) {
-      const data = audioBuffer.getChannelData(c);
-      for (let i = 0; i < len; i++) out[i] += data[i] / ch;
-    }
-    return out;
-  }
-
-  function downmixSeconds(signal, sampleRate, maxSeconds = 30) {
-    const maxLen = Math.min(signal.length, Math.floor(maxSeconds * sampleRate));
-    return signal.slice(0, maxLen);
-  }
-
-  // Feature extraction using Meyda
-  function extractFeatures(signal, sampleRate, opts = {}) {
-    if (!window.Meyda) throw new Error('Meyda 라이브러리를 불러오지 못했습니다.');
-    const frameSize = opts.frameSize || 2048;
-    const hopSize = opts.hopSize || 1024;
-
-    const featuresList = ['mfcc', 'spectralCentroid', 'spectralRolloff', 'spectralFlatness', 'zcr', 'rms'];
-    const numFrames = Math.max(0, Math.floor((signal.length - frameSize) / hopSize) + 1);
-    const seq = new Array(numFrames);
-
-    for (let i = 0; i < numFrames; i++) {
-      const start = i * hopSize;
-      const frame = signal.slice(start, start + frameSize);
-      const f = Meyda.extract(featuresList, frame, { sampleRate, bufferSize: frameSize, melBands: 26, numberOfMFCCCoefficients: 13 });
-      // build vector: 13 MFCCs + 5 scalars
-      const vec = [].concat(
-        (f.mfcc || new Array(13).fill(0)),
-        [f.spectralCentroid || 0, f.spectralRolloff || 0, f.spectralFlatness || 0, f.zcr || 0, f.rms || 0]
-      );
-      seq[i] = vec;
-    }
-    return seq; // [frames][dims]
-  }
-
-  // Standardize features across concatenated sequences
-  function standardizeTwo(seqA, seqB) {
-    if (seqA.length === 0 || seqB.length === 0) return { A: seqA, B: seqB, mean: [], std: [] };
-    const dims = seqA[0].length;
-    const all = seqA.concat(seqB);
-    const mean = new Array(dims).fill(0);
-    const std = new Array(dims).fill(0);
-
-    for (let d = 0; d < dims; d++) {
-      let m = 0;
-      for (let i = 0; i < all.length; i++) m += all[i][d];
-      m /= all.length;
-      mean[d] = m;
-      let s = 0;
-      for (let i = 0; i < all.length; i++) { const diff = all[i][d] - m; s += diff * diff; }
-      std[d] = Math.sqrt(s / Math.max(1, all.length - 1)) || 1e-9;
-    }
-
-    const norm = (seq) => seq.map(v => v.map((x, d) => (x - mean[d]) / std[d]));
-    return { A: norm(seqA), B: norm(seqB), mean, std };
-  }
-
-  // Euclidean distance between two vectors
-  const dist = (a, b) => {
-    let s = 0; for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; } return Math.sqrt(s);
-  };
-
-  // DTW with Sakoe-Chiba band
-  function dtwDistance(seqA, seqB, bandRatio = 0.15) {
-    const n = seqA.length, m = seqB.length;
-    if (!n || !m) return Infinity;
-    const band = Math.max(1, Math.floor(Math.max(n, m) * bandRatio));
-
-    const prev = new Float32Array(m + 1).fill(Infinity);
-    const curr = new Float32Array(m + 1).fill(Infinity);
-    prev[0] = 0;
-
-    for (let i = 1; i <= n; i++) {
-      curr[0] = Infinity;
-      // window bounds
-      const jStart = Math.max(1, i - band);
-      const jEnd   = Math.min(m, i + band);
-      // fill outside band with Infinity
-      for (let j = 1; j < jStart; j++) curr[j] = Infinity;
-      for (let j = jStart; j <= jEnd; j++) {
-        const cost = dist(seqA[i-1], seqB[j-1]);
-        const val = cost + Math.min(prev[j], curr[j-1], prev[j-1]);
-        curr[j] = val;
-      }
-      for (let j = jEnd + 1; j <= m; j++) curr[j] = Infinity;
-      // swap
-      prev.set(curr);
-    }
-    const pathCost = prev[m];
-    const norm = pathCost / (n + m); // average per step
-    return norm;
-  }
-
-  function scoreFromDistance(d) {
-    if (!isFinite(d)) return 0;
-    const score = 100 * (5 / (d + 5)); // smoother mapping
-    return Math.round(clamp(score, 0, 100));
-  }
-
-  function setStars(score) {
-    const stars = document.querySelectorAll('#stars .star');
-    let n = 0; if (score >= 85) n = 3; else if (score >= 70) n = 2; else if (score >= 50) n = 1; else n = 0;
-    stars.forEach((s, i) => s.style.opacity = i < n ? '1' : '0.3');
-    return n;
-  }
-
-  function updateArc(score) {
-    const arc = document.getElementById('score-arc');
-    const C = 2 * Math.PI * 90; // circumference
-    const offset = C * (1 - score/100);
-    arc.setAttribute('stroke-dashoffset', String(offset));
-  }
-
-  // Animate score number + arc from current to target
-  function animateScore(target, duration = 900) {
-    const startText = parseInt(scoreEl.textContent, 10);
-    const start = isNaN(startText) ? 0 : startText;
-    const from = clamp(start, 0, 100);
-    const to = clamp(target, 0, 100);
-    if (from === to) { updateArc(to); scoreEl.textContent = String(to); return; }
-    const t0 = performance.now();
-    const ease = (t)=> t<0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; // cubic in-out
-    function frame(now){
-      const p = clamp((now - t0)/duration, 0, 1);
-      const v = Math.round(from + (to - from) * ease(p));
-      scoreEl.textContent = String(v);
-      updateArc(v);
-      if (p < 1) requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
-  }
-
-  function explainText(score, d) {
-    if (!isFinite(d)) return '두 신호 중 하나가 비어 있어 비교할 수 없습니다.';
-    if (score >= 85) return '🎉 훌륭해요! 두 음성이 매우 유사합니다.';
-    if (score >= 70) return '좋습니다. 특징이 꽤 비슷합니다. 좀 더 톤/속도를 맞춰보세요.';
-    if (score >= 50) return '보통 수준의 유사도입니다. 발음/리듬/잡음을 줄이면 더 좋아져요.';
-    return '낮은 유사도입니다. 환경 소음 제거, 마이크 거리, 말하는 속도를 재조정해 보세요.';
-  }
-
-  // --- DOM elements ------------------------------------------------------
-  const refFile = document.getElementById('ref-file');
-  const refAudio = document.getElementById('ref-audio');
-  const analyzeRefBtn = document.getElementById('analyze-ref');
-  const refStatus = document.getElementById('ref-status');
-  const refMeta = document.getElementById('ref-meta');
-
-  const recBtn = document.getElementById('rec-btn');
-  const recTimer = document.getElementById('rec-timer');
-  const recAudio = document.getElementById('rec-audio');
-  const recStatus = document.getElementById('rec-status');
-  const recMeta = document.getElementById('rec-meta');
-  const viz = document.getElementById('viz');
-
-  const compareBtn = document.getElementById('compare-btn');
-  const scoreEl = document.getElementById('score');
-  const rankEl = document.getElementById('rank');
-  const explainEl = document.getElementById('explain');
-  const downloadBtn = document.getElementById('download-json');
-  const resetBtn = document.getElementById('reset-btn');
-
-  const AC = new (window.AudioContext || window.webkitAudioContext)();
-
-  // State
-  let ref = { signal: null, sr: null, feats: null };
-  let live = { signal: null, sr: null, feats: null };
-  let mediaRecorder = null, mediaStream = null, recChunks = [], recStart = 0, recTimerId = null;
-
-  // --- Visualization (simple waveform while recording) -------------------
-  let vizCtx = viz.getContext('2d');
-  let analyser = null, source = null, vizRaf = null, silentGain = null;
-  function drawViz() {
-    if (!analyser) return;
-    vizRaf = requestAnimationFrame(drawViz);
-    const data = new Uint8Array(analyser.fftSize);
-    analyser.getByteTimeDomainData(data);
-    vizCtx.clearRect(0,0,viz.width,viz.height);
-    vizCtx.fillStyle = 'rgba(148,163,184,0.1)';
-    vizCtx.fillRect(0,0,viz.width,viz.height);
-    vizCtx.strokeStyle = '#93c5fd';
-    vizCtx.lineWidth = 2;
-    vizCtx.beginPath();
-    const step = data.length / viz.width;
-    for (let x = 0; x < viz.width; x++) {
-      const v = (data[Math.floor(x*step)] - 128) / 128;
-      const y = viz.height/2 + v * (viz.height/2 - 4);
-      if (x===0) vizCtx.moveTo(x,y); else vizCtx.lineTo(x,y);
-    }
-    vizCtx.stroke();
-  }
-    vizCtx.stroke();
-  }
-  function resizeViz() { viz.width = viz.clientWidth * (window.devicePixelRatio || 1); viz.height = viz.clientHeight * (window.devicePixelRatio || 1); }
-  window.addEventListener('resize', resizeViz); resizeViz();
-
-  // --- File handling -----------------------------------------------------
-  refFile.addEventListener('change', () => {
+refFile.addEventListener('change', () => {
     const file = refFile.files?.[0];
-    analyzeRefBtn.disabled = !file;
+    analyzeRefBtn.disabled = !file || !(file.size > 0);
     if (!file) return;
     const url = URL.createObjectURL(file);
     refAudio.src = url; refAudio.classList.remove('hidden');
     refStatus.classList.add('hidden');
     refMeta.textContent = '';
   });
-
-  analyzeRefBtn.addEventListener('click', async () => {
+  // extra compatibility
+  refFile.addEventListener('input', () => {
     const file = refFile.files?.[0];
-    if (!file) return;
-    try {
-      analyzeRefBtn.disabled = true; analyzeRefBtn.textContent = '분석 중…';
-      const arrayBuf = await file.arrayBuffer();
-      const audioBuf = await AC.decodeAudioData(arrayBuf);
-      const srTarget = 22050;
-      let mono = toMonoFloat32(audioBuf);
-      mono = downmixSeconds(mono, audioBuf.sampleRate, 30);
-      const res = resampleMono(mono, audioBuf.sampleRate, srTarget);
-      const feats = extractFeatures(res, srTarget);
-      ref = { signal: res, sr: srTarget, feats };
-      refStatus.classList.remove('hidden');
-      refMeta.textContent = `길이 ${fmtTime(res.length/srTarget)}, 프레임 ${feats.length}개 @ ${srTarget}Hz`;
-      compareBtn.disabled = !(ref.feats && live.feats);
-    } catch (e) {
-      alert('참조 음성 분석 오류: ' + e.message);
-      console.error(e);
-    } finally {
-      analyzeRefBtn.textContent = '참조 음성 분석';
-      analyzeRefBtn.disabled = false;
-    }
+    analyzeRefBtn.disabled = !file || !(file.size > 0);
   });
-
-  // --- Recording ---------------------------------------------------------
-  recBtn.addEventListener('click', async () => {
-    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-      // start
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Ensure audio context is running (autoplay policies)
-        if (AC.state !== 'running') { try { await AC.resume(); } catch(e) { console.warn('AC resume failed', e); } }
-
-        mediaRecorder = new MediaRecorder(mediaStream);
-        recChunks = [];
-        mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
-        mediaRecorder.onstop = async () => {
-          try {
-            const blob = new Blob(recChunks, { type: (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : 'audio/webm' });
-            const url = URL.createObjectURL(blob);
-            recAudio.src = url; recAudio.classList.remove('hidden');
-            recStatus.classList.remove('hidden');
-
-            // Decode
-            const arrayBuf = await blob.arrayBuffer();
-            const audioBuf = await AC.decodeAudioData(arrayBuf);
-            const srTarget = 22050;
-            let mono = toMonoFloat32(audioBuf);
-            mono = downmixSeconds(mono, audioBuf.sampleRate, 30);
-            const res = resampleMono(mono, audioBuf.sampleRate, srTarget);
-            const feats = extractFeatures(res, srTarget);
-            live = { signal: res, sr: srTarget, feats };
-            recMeta.textContent = `길이 ${fmtTime(res.length/srTarget)}, 프레임 ${feats.length}개 @ ${srTarget}Hz`;
-            compareBtn.disabled = !(ref.feats && live.feats);
-          } catch (e) {
-            alert('녹음 파일 처리 오류: ' + e.message);
-            console.error(e);
-          } finally {
-            // Cleanup & UI reset after processing
-            if (vizRaf) { cancelAnimationFrame(vizRaf); vizRaf = null; }
-            if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-            if (silentGain) { try { silentGain.disconnect(); } catch(_){} silentGain = null; }
-            mediaRecorder = null; mediaStream = null;
-            recBtn.textContent = '🎙️ 녹음 시작';
-            recBtn.classList.remove('pulse-ring');
-            if (recTimerId) { clearInterval(recTimerId); recTimerId = null; }
-            recTimer.textContent = '00:00';
-            analyser = null; source = null;
-          }
-        };
-        mediaRecorder.start();
-        recBtn.textContent = '⏹️ 녹음 중지';
-        recBtn.classList.add('pulse-ring');
-
-        // timer
-        recStart = Date.now();
-        recTimerId = setInterval(() => {
-          const sec = (Date.now() - recStart) / 1000;
-          recTimer.textContent = fmtTime(sec);
-        }, 200);
-
-        // live viz (connect to a silent sink so worklet pulls data reliably)
-        analyser = AC.createAnalyser();
-        analyser.fftSize = 1024;
-        analyser.smoothingTimeConstant = 0.8;
-        source = AC.createMediaStreamSource(mediaStream);
-        source.connect(analyser);
-        silentGain = AC.createGain();
-        silentGain.gain.value = 0;
-        analyser.connect(silentGain);
-        silentGain.connect(AC.destination);
-        vizRaf = requestAnimationFrame(drawViz);
-
-      } catch (e) {
-        alert('마이크 권한 또는 환경 오류: ' + e.message);
-        console.error(e);
-      }
-    } else {
-      // stop (cleanup will occur in onstop handler)
-      try { mediaRecorder.stop(); } catch (e) { console.warn('stop error:', e); }
-      if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-    }
-  });
-
-  // --- Compare -----------------------------------------------------------
-  compareBtn.addEventListener('click', () => {
-    try {
-      if (!ref.feats || !live.feats) throw new Error('참조/녹음 데이터가 부족합니다.');
-      // downsample frames to keep compute light
-      const maxFrames = 300;
-      const shrink = (seq) => {
-        if (seq.length <= maxFrames) return seq;
-        const step = seq.length / maxFrames;
-        const out = [];
-        for (let i = 0; i < maxFrames; i++) out.push(seq[Math.floor(i*step)]);
-        return out;
-      };
-      const A0 = shrink(ref.feats); const B0 = shrink(live.feats);
-      const { A, B } = standardizeTwo(A0, B0);
-      const d = dtwDistance(A, B, 0.12);
-      const score = scoreFromDistance(d);
-
-      animateScore(score);
-      const stars = setStars(score);
-      rankEl.textContent = stars === 3 ? 'SSS 등급' : stars === 2 ? 'SS 등급' : stars === 1 ? 'S 등급' : '노랭크';
-      explainEl.textContent = `${explainText(score, d)} (DTW 평균거리 ~ ${d.toFixed(3)})`;
-
-      // celebrate
-      if (stars >= 2) {
-        scoreEl.classList.add('animate-bounce');
-        setTimeout(() => scoreEl.classList.remove('animate-bounce'), 1200);
-      }
-
-      // enable download
-      downloadBtn.onclick = () => {
-        const payload = { 
-          timestamp: new Date().toISOString(),
-          score,
-          dtw_avg_distance: d,
-          reference: { seconds: ref.signal?.length / ref.sr, frames: ref.feats?.length, sr: ref.sr },
-          recorded: { seconds: live.signal?.length / live.sr, frames: live.feats?.length, sr: live.sr },
-        };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = `voice-match-result-${Date.now()}.json`;
-        document.body.appendChild(a); a.click(); a.remove();
-        URL.revokeObjectURL(url);
-      };
-
-    } catch (e) {
-      alert('유사도 계산 오류: ' + e.message);
-      console.error(e);
-    }
-  });
-
-  // --- Reset -------------------------------------------------------------
-  resetBtn.addEventListener('click', () => {
-    // clear state
-    ref = { signal: null, sr: null, feats: null };
-    live = { signal: null, sr: null, feats: null };
-    refFile.value = '';
-    refAudio.src = ''; refAudio.classList.add('hidden');
-    recAudio.src = ''; recAudio.classList.add('hidden');
-    refStatus.classList.add('hidden'); recStatus.classList.add('hidden');
-    refMeta.textContent = ''; recMeta.textContent = '';
-    compareBtn.disabled = true; analyzeRefBtn.disabled = true;
-    scoreEl.textContent = '--';
-    updateArc(0);
-    document.querySelectorAll('#stars .star').forEach(s => s.style.opacity = 0.3);
-    rankEl.textContent = '대기 중…';
-    explainEl.textContent = '';
-  });
-})();
 </script>
 </body>
 </html>
