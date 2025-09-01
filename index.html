@@ -61,7 +61,7 @@
         <div class="shine rounded-2xl p-5 border border-white/10">
           <h2 class="font-semibold text-lg">3) 비교 · 점수 확인</h2>
           <button id="compare-btn" class="mt-3 w-full rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 transition-colors px-4 py-2 font-semibold disabled:opacity-40" disabled>🔎 유사도 계산</button>
-          <p class="text-xs text-slate-400 mt-2">⚠️ 참고: MFCC + 스펙트럼 지표(centroid, rolloff, flatness, ZCR, RMS) → DTW로 정렬하여 점수화합니다. <strong>학술적/포렌식 신원 확인 용도가 아닙니다.</strong></p>
+          <p class="text-xs text-slate-400 mt-2">MFCC + 스펙트럼 지표(centroid, rolloff, flatness, ZCR, RMS) → DTW로 정렬하여 점수화합니다. (학술적 신원확인용 아님)</p>
         </div>
       </section>
 
@@ -69,6 +69,7 @@
       <section class="shine rounded-2xl p-6 border border-white/10 flex flex-col">
         <div class="flex-1 grid place-items-center">
           <div class="relative w-64 h-64">
+            <!-- Background circle -->
             <svg viewBox="0 0 200 200" class="absolute inset-0">
               <circle cx="100" cy="100" r="90" stroke="rgba(255,255,255,0.08)" stroke-width="18" fill="none"/>
               <circle id="score-arc" class="score-arc" cx="100" cy="100" r="90" stroke="url(#grad)" stroke-linecap="round" stroke-width="18" stroke-dasharray="565" stroke-dashoffset="565" fill="none"/>
@@ -104,7 +105,7 @@
     </main>
 
     <footer class="mt-10 text-center text-xs text-slate-400">
-      <p>⚠️ 본 도구는 재미·학습용입니다. <strong>법적·의학적·포렌식 신원확인 용도로 사용하지 마세요.</strong></p>
+      <p>⚠️ 본 도구는 재미·학습용입니다. 법적·의학적·포렌식 신원확인 용도로 사용하지 마세요.</p>
     </footer>
   </div>
 
@@ -157,6 +158,7 @@
   function extractFeatures(signal, sampleRate, opts = {}) {
     if (!window.Meyda) throw new Error('Meyda 라이브러리를 불러오지 못했습니다.');
     const frameSize = opts.frameSize || 2048;
+    theHop = opts.hopSize || 1024; // (typo fix below uses hopSize)
     const hopSize = opts.hopSize || 1024;
 
     const featuresList = ['mfcc', 'spectralCentroid', 'spectralRolloff', 'spectralFlatness', 'zcr', 'rms'];
@@ -167,7 +169,6 @@
       const start = i * hopSize;
       const frame = signal.slice(start, start + frameSize);
       const f = Meyda.extract(featuresList, frame, { sampleRate, bufferSize: frameSize, melBands: 26, numberOfMFCCCoefficients: 13 });
-      // build vector: 13 MFCCs + 5 scalars
       const vec = [].concat(
         (f.mfcc || new Array(13).fill(0)),
         [f.spectralCentroid || 0, f.spectralRolloff || 0, f.spectralFlatness || 0, f.zcr || 0, f.rms || 0]
@@ -216,10 +217,8 @@
 
     for (let i = 1; i <= n; i++) {
       curr[0] = Infinity;
-      // window bounds
       const jStart = Math.max(1, i - band);
       const jEnd   = Math.min(m, i + band);
-      // fill outside band with Infinity
       for (let j = 1; j < jStart; j++) curr[j] = Infinity;
       for (let j = jStart; j <= jEnd; j++) {
         const cost = dist(seqA[i-1], seqB[j-1]);
@@ -227,17 +226,16 @@
         curr[j] = val;
       }
       for (let j = jEnd + 1; j <= m; j++) curr[j] = Infinity;
-      // swap
       prev.set(curr);
     }
     const pathCost = prev[m];
-    const norm = pathCost / (n + m); // average per step
+    const norm = pathCost / (n + m);
     return norm;
   }
 
   function scoreFromDistance(d) {
     if (!isFinite(d)) return 0;
-    const score = 100 * (5 / (d + 5)); // smoother mapping
+    const score = 100 * (5 / (d + 5));
     return Math.round(clamp(score, 0, 100));
   }
 
@@ -250,7 +248,7 @@
 
   function updateArc(score) {
     const arc = document.getElementById('score-arc');
-    const C = 2 * Math.PI * 90; // circumference
+    const C = 2 * Math.PI * 90;
     const offset = C * (1 - score/100);
     arc.setAttribute('stroke-dashoffset', String(offset));
   }
@@ -263,7 +261,7 @@
     const to = clamp(target, 0, 100);
     if (from === to) { updateArc(to); scoreEl.textContent = String(to); return; }
     const t0 = performance.now();
-    const ease = (t)=> t<0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; // cubic in-out
+    const ease = (t)=> t<0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
     function frame(now){
       const p = clamp((now - t0)/duration, 0, 1);
       const v = Math.round(from + (to - from) * ease(p));
@@ -272,14 +270,6 @@
       if (p < 1) requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
-  }
-
-  function explainText(score, d) {
-    if (!isFinite(d)) return '두 신호 중 하나가 비어 있어 비교할 수 없습니다.';
-    if (score >= 85) return '🎉 훌륭해요! 두 음성이 매우 유사합니다.';
-    if (score >= 70) return '좋습니다. 특징이 꽤 비슷합니다. 좀 더 톤/속도를 맞춰보세요.';
-    if (score >= 50) return '보통 수준의 유사도입니다. 발음/리듬/잡음을 줄이면 더 좋아져요.';
-    return '낮은 유사도입니다. 환경 소음 제거, 마이크 거리, 말하는 속도를 재조정해 보세요.';
   }
 
   // --- DOM elements ------------------------------------------------------
@@ -310,12 +300,13 @@
   let live = { signal: null, sr: null, feats: null };
   let mediaRecorder = null, mediaStream = null, recChunks = [], recStart = 0, recTimerId = null;
 
-  // --- Visualization (simple waveform while recording) -------------------
-  let vizCtx = viz.getContext('2d');
-  let analyser = null, source = null, vizRaf = null, silentGain = null;
+  // --- Visualization (real-time waveform) --------------------------------
+  const vizCtx = viz.getContext('2d');
+  let analyser = null, source = null;
+  let vizRAF = null;
+
   function drawViz() {
     if (!analyser) return;
-    vizRaf = requestAnimationFrame(drawViz);
     const data = new Uint8Array(analyser.fftSize);
     analyser.getByteTimeDomainData(data);
     vizCtx.clearRect(0,0,viz.width,viz.height);
@@ -331,11 +322,35 @@
       if (x===0) vizCtx.moveTo(x,y); else vizCtx.lineTo(x,y);
     }
     vizCtx.stroke();
-  }
-    vizCtx.stroke();
+    vizRAF = requestAnimationFrame(drawViz);
   }
   function resizeViz() { viz.width = viz.clientWidth * (window.devicePixelRatio || 1); viz.height = viz.clientHeight * (window.devicePixelRatio || 1); }
   window.addEventListener('resize', resizeViz); resizeViz();
+
+  function startViz(stream) {
+    analyser = AC.createAnalyser();
+    analyser.fftSize = 1024;
+    source = AC.createMediaStreamSource(stream);
+    source.connect(analyser);
+    if (vizRAF) cancelAnimationFrame(vizRAF);
+    vizRAF = requestAnimationFrame(drawViz);
+  }
+  function stopViz() {
+    if (vizRAF) cancelAnimationFrame(vizRAF);
+    vizRAF = null;
+    analyser = null;
+    source = null;
+    // clear canvas to neutral line
+    vizCtx.clearRect(0,0,viz.width,viz.height);
+    vizCtx.fillStyle = 'rgba(148,163,184,0.1)';
+    vizCtx.fillRect(0,0,viz.width,viz.height);
+    vizCtx.strokeStyle = '#93c5fd';
+    vizCtx.lineWidth = 2;
+    vizCtx.beginPath();
+    vizCtx.moveTo(0, viz.height/2);
+    vizCtx.lineTo(viz.width, viz.height/2);
+    vizCtx.stroke();
+  }
 
   // --- File handling -----------------------------------------------------
   refFile.addEventListener('change', () => {
@@ -379,9 +394,6 @@
       // start
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Ensure audio context is running (autoplay policies)
-        if (AC.state !== 'running') { try { await AC.resume(); } catch(e) { console.warn('AC resume failed', e); } }
-
         mediaRecorder = new MediaRecorder(mediaStream);
         recChunks = [];
         mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
@@ -392,7 +404,7 @@
             recAudio.src = url; recAudio.classList.remove('hidden');
             recStatus.classList.remove('hidden');
 
-            // Decode
+            // Decode for features
             const arrayBuf = await blob.arrayBuffer();
             const audioBuf = await AC.decodeAudioData(arrayBuf);
             const srTarget = 22050;
@@ -407,16 +419,14 @@
             alert('녹음 파일 처리 오류: ' + e.message);
             console.error(e);
           } finally {
-            // Cleanup & UI reset after processing
-            if (vizRaf) { cancelAnimationFrame(vizRaf); vizRaf = null; }
+            // Cleanup & UI reset after processing (single place)
             if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-            if (silentGain) { try { silentGain.disconnect(); } catch(_){} silentGain = null; }
             mediaRecorder = null; mediaStream = null;
             recBtn.textContent = '🎙️ 녹음 시작';
             recBtn.classList.remove('pulse-ring');
             if (recTimerId) { clearInterval(recTimerId); recTimerId = null; }
             recTimer.textContent = '00:00';
-            analyser = null; source = null;
+            stopViz();
           }
         };
         mediaRecorder.start();
@@ -430,17 +440,8 @@
           recTimer.textContent = fmtTime(sec);
         }, 200);
 
-        // live viz (connect to a silent sink so worklet pulls data reliably)
-        analyser = AC.createAnalyser();
-        analyser.fftSize = 1024;
-        analyser.smoothingTimeConstant = 0.8;
-        source = AC.createMediaStreamSource(mediaStream);
-        source.connect(analyser);
-        silentGain = AC.createGain();
-        silentGain.gain.value = 0;
-        analyser.connect(silentGain);
-        silentGain.connect(AC.destination);
-        vizRaf = requestAnimationFrame(drawViz);
+        // live viz
+        startViz(mediaStream);
 
       } catch (e) {
         alert('마이크 권한 또는 환경 오류: ' + e.message);
@@ -457,7 +458,6 @@
   compareBtn.addEventListener('click', () => {
     try {
       if (!ref.feats || !live.feats) throw new Error('참조/녹음 데이터가 부족합니다.');
-      // downsample frames to keep compute light
       const maxFrames = 300;
       const shrink = (seq) => {
         if (seq.length <= maxFrames) return seq;
@@ -474,15 +474,17 @@
       animateScore(score);
       const stars = setStars(score);
       rankEl.textContent = stars === 3 ? 'SSS 등급' : stars === 2 ? 'SS 등급' : stars === 1 ? 'S 등급' : '노랭크';
-      explainEl.textContent = `${explainText(score, d)} (DTW 평균거리 ~ ${d.toFixed(3)})`;
+      explainEl.textContent = `${(!isFinite(d) ? '두 신호 중 하나가 비어 있어 비교할 수 없습니다.' :
+        (score >= 85 ? '🎉 훌륭해요! 두 음성이 매우 유사합니다.' :
+        score >= 70 ? '좋습니다. 특징이 꽤 비슷합니다. 좀 더 톤/속도를 맞춰보세요.' :
+        score >= 50 ? '보통 수준의 유사도입니다. 발음/리듬/잡음을 줄이면 더 좋아져요.' :
+        '낮은 유사도입니다. 환경 소음 제거, 마이크 거리, 말하는 속도를 재조정해 보세요.'))} (DTW 평균거리 ~ ${isFinite(d) ? d.toFixed(3) : 'N/A'})`;
 
-      // celebrate
       if (stars >= 2) {
         scoreEl.classList.add('animate-bounce');
         setTimeout(() => scoreEl.classList.remove('animate-bounce'), 1200);
       }
 
-      // enable download
       downloadBtn.onclick = () => {
         const payload = { 
           timestamp: new Date().toISOString(),
@@ -507,9 +509,10 @@
 
   // --- Reset -------------------------------------------------------------
   resetBtn.addEventListener('click', () => {
-    // clear state
     ref = { signal: null, sr: null, feats: null };
     live = { signal: null, sr: null, feats: null };
+    if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+    mediaRecorder = null; mediaStream = null;
     refFile.value = '';
     refAudio.src = ''; refAudio.classList.add('hidden');
     recAudio.src = ''; recAudio.classList.add('hidden');
@@ -521,6 +524,9 @@
     document.querySelectorAll('#stars .star').forEach(s => s.style.opacity = 0.3);
     rankEl.textContent = '대기 중…';
     explainEl.textContent = '';
+    if (recTimerId) { clearInterval(recTimerId); recTimerId = null; }
+    recTimer.textContent = '00:00';
+    stopViz();
   });
 })();
 </script>
