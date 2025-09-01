@@ -256,6 +256,25 @@
     arc.setAttribute('stroke-dashoffset', String(offset));
   }
 
+  // Animate score number + arc from current to target
+  function animateScore(target, duration = 900) {
+    const startText = parseInt(scoreEl.textContent, 10);
+    const start = isNaN(startText) ? 0 : startText;
+    const from = clamp(start, 0, 100);
+    const to = clamp(target, 0, 100);
+    if (from === to) { updateArc(to); scoreEl.textContent = String(to); return; }
+    const t0 = performance.now();
+    const ease = (t)=> t<0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; // cubic in-out
+    function frame(now){
+      const p = clamp((now - t0)/duration, 0, 1);
+      const v = Math.round(from + (to - from) * ease(p));
+      scoreEl.textContent = String(v);
+      updateArc(v);
+      if (p < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
   function explainText(score, d) {
     if (!isFinite(d)) return '두 신호 중 하나가 비어 있어 비교할 수 없습니다.';
     if (score >= 85) return '🎉 훌륭해요! 두 음성이 매우 유사합니다.';
@@ -441,8 +460,7 @@
       const d = dtwDistance(A, B, 0.12);
       const score = scoreFromDistance(d);
 
-      scoreEl.textContent = String(score);
-      updateArc(score);
+      animateScore(score);
       const stars = setStars(score);
       rankEl.textContent = stars === 3 ? 'SSS 등급' : stars === 2 ? 'SS 등급' : stars === 1 ? 'S 등급' : '노랭크';
       explainEl.textContent = `${explainText(score, d)} (DTW 평균거리 ~ ${d.toFixed(3)})`;
