@@ -313,10 +313,10 @@
 
   // --- Visualization (simple waveform while recording) -------------------
   let vizCtx = viz.getContext('2d');
-  let analyser = null, source = null;
+  let analyser = null, source = null, vizRaf = null, silentGain = null;
   function drawViz() {
     if (!analyser) return;
-    requestAnimationFrame(drawViz);
+    vizRaf = requestAnimationFrame(drawViz);
     const data = new Uint8Array(analyser.fftSize);
     analyser.getByteTimeDomainData(data);
     vizCtx.clearRect(0,0,viz.width,viz.height);
@@ -331,6 +331,8 @@
       const y = viz.height/2 + v * (viz.height/2 - 4);
       if (x===0) vizCtx.moveTo(x,y); else vizCtx.lineTo(x,y);
     }
+    vizCtx.stroke();
+  }
     vizCtx.stroke();
   }
   function resizeViz() { viz.width = viz.clientWidth * (window.devicePixelRatio || 1); viz.height = viz.clientHeight * (window.devicePixelRatio || 1); }
@@ -378,6 +380,9 @@
       // start
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Ensure audio context is running (autoplay policies)
+        if (AC.state !== 'running') { try { await AC.resume(); } catch(e) { console.warn('AC resume failed', e); } }
+
         mediaRecorder = new MediaRecorder(mediaStream);
         recChunks = [];
         mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
@@ -404,7 +409,9 @@
             console.error(e);
           } finally {
             // Cleanup & UI reset after processing
+            if (vizRaf) { cancelAnimationFrame(vizRaf); vizRaf = null; }
             if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+            if (silentGain) { try { silentGain.disconnect(); } catch(_){} silentGain = null; }
             mediaRecorder = null; mediaStream = null;
             recBtn.textContent = '🎙️ 녹음 시작';
             recBtn.classList.remove('pulse-ring');
@@ -424,12 +431,17 @@
           recTimer.textContent = fmtTime(sec);
         }, 200);
 
-        // live viz
+        // live viz (connect to a silent sink so worklet pulls data reliably)
         analyser = AC.createAnalyser();
         analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.8;
         source = AC.createMediaStreamSource(mediaStream);
         source.connect(analyser);
-        drawViz();
+        silentGain = AC.createGain();
+        silentGain.gain.value = 0;
+        analyser.connect(silentGain);
+        silentGain.connect(AC.destination);
+        vizRaf = requestAnimationFrame(drawViz);
 
       } catch (e) {
         alert('마이크 권한 또는 환경 오류: ' + e.message);
