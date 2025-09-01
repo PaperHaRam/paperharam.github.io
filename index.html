@@ -479,17 +479,25 @@
     try { if (rebind && analyser) analyser.disconnect(); } catch(_) {}
     try { if (rebind && keepAlive) keepAlive.disconnect(); } catch(_) {}
 
+    // 소스 & 분석기
+    source = AC.createMediaStreamSource(stream);
     analyser = AC.createAnalyser();
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.85;
     analyser.minDecibels = -90;
     analyser.maxDecibels = -10;
 
-    source = AC.createMediaStreamSource(stream);
-    keepAlive = AC.createGain();
-    keepAlive.gain.value = 0.0;
-    source.connect(keepAlive);
-    keepAlive.connect(analyser);
+    // 🚩 중요: 무음 브랜치를 destination으로도 연결해 그래프를 'pull'
+    const pull = AC.createGain();
+    pull.gain.value = 0.0;
+
+    // 두 갈래: (1) 파형 분석용 (2) 그래프 활성화를 위한 destination 브랜치
+    source.connect(analyser);
+    source.connect(pull);
+    pull.connect(AC.destination);
+
+    // 참조용으로 유지(원래 keepAlive 쓰던 곳 대체 가능)
+    keepAlive = pull;
 
     vizRAF = requestAnimationFrame(drawViz);
   }
