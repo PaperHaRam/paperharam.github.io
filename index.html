@@ -69,7 +69,6 @@
       <section class="shine rounded-2xl p-6 border border-white/10 flex flex-col">
         <div class="flex-1 grid place-items-center">
           <div class="relative w-64 h-64">
-            <!-- Background circle -->
             <svg viewBox="0 0 200 200" class="absolute inset-0">
               <circle cx="100" cy="100" r="90" stroke="rgba(255,255,255,0.08)" stroke-width="18" fill="none"/>
               <circle id="score-arc" class="score-arc" cx="100" cy="100" r="90" stroke="url(#grad)" stroke-linecap="round" stroke-width="18" stroke-dasharray="565" stroke-dashoffset="565" fill="none"/>
@@ -93,7 +92,7 @@
           <div id="stars" class="mt-2 flex items-center justify-center gap-1">
             <svg class="star w-7 h-7 opacity-30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .587l3.668 7.431 8.2 1.193-5.934 5.787 1.401 8.168L12 18.896l-7.335 3.87 1.401-8.168L.132 9.211l8.2-1.193z"/></svg>
             <svg class="star w-7 h-7 opacity-30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .587l3.668 7.431 8.2 1.193-5.934 5.787 1.401 8.168L12 18.896l-7.335 3.87 1.401-8.168L.132 9.211l8.2-1.193z"/></svg>
-            <svg class="star w-7 h-7 opacity-30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .587l3.668 7.431 8.2 1.193-5.934 5.787 1.401 8.168L12 18.896l-7.335 3.87 1.401-8.168L.132 9.211l8.2-1.193z"/></svg>
+            <svg class="star w-7 h-7 opacity-30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .587l3.668 7.431 8.2 1.193-5.934 5.787 1.401 8.168L12 18.896l-7.335 3.87 1.401-8-168L.132 9.211l8.2-1.193z"/></svg>
           </div>
           <div id="explain" class="text-xs text-slate-400 mt-3 leading-relaxed"></div>
           <div class="mt-4 flex gap-2 justify-center">
@@ -252,7 +251,6 @@
     arc.setAttribute('stroke-dashoffset', String(offset));
   }
 
-  // Animate score number + arc from current to target
   function animateScore(target, duration = 900) {
     const startText = parseInt(scoreEl.textContent, 10);
     const start = isNaN(startText) ? 0 : startText;
@@ -293,6 +291,129 @@
   const resetBtn = document.getElementById('reset-btn');
 
   const AC = new (window.AudioContext || window.webkitAudioContext)();
+
+  // --- Helpers: toast, codec pick, WAV encoder, recorder factory ---------
+  function toast(msg) {
+    console.warn('[VoiceMatch]', msg);
+    try { alert(msg); } catch(_) {}
+  }
+  function pickBestMimeType() {
+    const prefs = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+      'audio/mp4',
+      'audio/mpeg'
+    ];
+    if (!('MediaRecorder' in window)) return null;
+    for (const t of prefs) {
+      if (MediaRecorder.isTypeSupported?.(t)) return t;
+    }
+    return null;
+  }
+  function encodeWav(samplesF32, sampleRate = 48000) {
+    const samples = new Int16Array(samplesF32.length);
+    for (let i = 0; i < samplesF32.length; i++) {
+      const s = Math.max(-1, Math.min(1, samplesF32[i]));
+      samples[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    const bytesPerSample = 2;
+    const blockAlign = 1 * bytesPerSample;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = samples.length * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+    let p = 0;
+    const wStr = s => { for (let i=0;i<s.length;i++) view.setUint8(p++, s.charCodeAt(i)); };
+    const w32 = v => { view.setUint32(p, v, true); p+=4; };
+    const w16 = v => { view.setUint16(p, v, true); p+=2; };
+    wStr('RIFF'); w32(36 + dataSize); wStr('WAVE'); wStr('fmt '); w32(16);
+    w16(1); w16(1); w32(sampleRate); w32(byteRate); w16(blockAlign); w16(16);
+    wStr('data'); w32(dataSize);
+    new Int16Array(buffer, 44).set(samples);
+    return new Blob([buffer], { type: 'audio/wav' });
+  }
+  function createRecorder(stream, audioContext) {
+    const type = pickBestMimeType();
+    if ('MediaRecorder' in window && type) {
+      const mr = new MediaRecorder(stream, { mimeType: type });
+      const chunks = [];
+      let stopped = false;
+      return {
+        kind: 'mediarecorder',
+        start() { mr.start(); },
+        stop() { try { mr.stop(); } catch(_) {} stopped = true; },
+        ondata(cb) { mr.ondataavailable = e => { if (e.data?.size) chunks.push(e.data); }; },
+        async result() {
+          if (!stopped) this.stop();
+          await new Promise(r => mr.onstop = r);
+          return new Blob(chunks, { type });
+        }
+      };
+    } else {
+      const source = audioContext.createMediaStreamSource(stream);
+      const sampleRate = audioContext.sampleRate;
+      const collected = [];
+      let processor = null;
+      let resolveStop;
+      async function setupNode() {
+        try {
+          if (!audioContext.audioWorklet) throw new Error('no worklet');
+          const workletCode = `
+            class MonoTap extends AudioWorkletProcessor {
+              process(inputs) {
+                const input = inputs[0];
+                if (input && input[0]) {
+                  const ch = input[0];
+                  const out = new Float32Array(ch.length);
+                  out.set(ch);
+                  this.port.postMessage(out, [out.buffer]);
+                }
+                return true;
+              }
+            }
+            registerProcessor('mono-tap', MonoTap);
+          `;
+          const blob = new Blob([workletCode], { type: 'application/javascript' });
+          const url = URL.createObjectURL(blob);
+          await audioContext.audioWorklet.addModule(url);
+          const node = new AudioWorkletNode(audioContext, 'mono-tap');
+          node.port.onmessage = (e) => { collected.push(new Float32Array(e.data)); };
+          source.connect(node);
+          processor = node;
+        } catch (_) {
+          const sp = audioContext.createScriptProcessor(4096, 1, 1);
+          sp.onaudioprocess = (e) => {
+            const ch = e.inputBuffer.getChannelData(0);
+            collected.push(new Float32Array(ch));
+          };
+          source.connect(sp);
+          sp.connect(audioContext.destination);
+          processor = sp;
+        }
+      }
+      const ready = setupNode();
+      return {
+        kind: 'wav-fallback',
+        async start() { await ready; },
+        stop() {
+          try { processor?.disconnect?.(); source.disconnect(); } catch(_) {}
+          if (resolveStop) resolveStop();
+        },
+        ondata() {},
+        async result() {
+          await new Promise(r => (resolveStop = r));
+          let total = 0;
+          for (const b of collected) total += b.length;
+          const merged = new Float32Array(total);
+          let off = 0;
+          for (const b of collected) { merged.set(b, off); off += b.length; }
+          return encodeWav(merged, sampleRate);
+        }
+      };
+    }
+  }
 
   // --- Robust Visualization ----------------------------------------------
   const vizCtx = viz.getContext('2d');
@@ -341,10 +462,8 @@
     }
     vizCtx.stroke();
 
-    // 평탄(데이터 128 근처만)하면 자동 복구 시도
     if (sumVar / viz.width < 0.002) {
       if (AC.state !== 'running') AC.resume().catch(()=>{});
-      // 연결 재시도
       if (mediaStream && (!source || !analyser)) {
         try { startViz(mediaStream, true); } catch(_) {}
       }
@@ -369,8 +488,6 @@
     source = AC.createMediaStreamSource(stream);
     keepAlive = AC.createGain();
     keepAlive.gain.value = 0.0;
-
-    // source -> keepAlive -> analyser (destination에는 연결하지 않음)
     source.connect(keepAlive);
     keepAlive.connect(analyser);
 
@@ -433,79 +550,90 @@
     }
   });
 
-  // --- Recording ---------------------------------------------------------
+  // --- Recording (with WAV fallback & HTTPS guard) -----------------------
+  let mediaRecorder = null, mediaStream = null, recChunks = [], recStart = 0, recTimerId = null;
+
   recBtn.addEventListener('click', async () => {
+    // START
     if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-      // start
       try {
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+          toast('마이크는 HTTPS에서만 동작해요. GitHub Pages/Netlify/localhost 등을 사용해 주세요.');
+          return;
+        }
         try { await AC.resume(); } catch(_) {}
+
         mediaStream = await navigator.mediaDevices.getUserMedia({
           audio: {
+            channelCount: 1,
+            sampleRate: 48000,
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: false
           }
         });
 
-        mediaRecorder = new MediaRecorder(mediaStream);
-        recChunks = [];
-        mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
+        // 실시간 파형 즉시 시작
+        startViz(mediaStream);
 
-        mediaRecorder.onstop = async () => {
-          try {
-            const blob = new Blob(recChunks, { type: (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : 'audio/webm' });
-            const url = URL.createObjectURL(blob);
-            recAudio.src = url; recAudio.classList.remove('hidden');
-            recStatus.classList.remove('hidden');
+        // 자동 레코더 선택(MediaRecorder 우선, 실패 시 WAV)
+        const rec = createRecorder(mediaStream, AC);
+        rec.ondata?.(()=>{});
+        await rec.start();
 
-            // Decode for features
-            const arrayBuf = await blob.arrayBuffer();
-            const audioBuf = await AC.decodeAudioData(arrayBuf);
-            const srTarget = 22050;
-            let mono = toMonoFloat32(audioBuf);
-            mono = downmixSeconds(mono, audioBuf.sampleRate, 30);
-            const res = resampleMono(mono, audioBuf.sampleRate, srTarget);
-            const feats = extractFeatures(res, srTarget);
-            live = { signal: res, sr: srTarget, feats };
-            recMeta.textContent = `길이 ${fmtTime(res.length/srTarget)}, 프레임 ${feats.length}개 @ ${srTarget}Hz`;
-            compareBtn.disabled = !(ref.feats && live.feats);
-          } catch (e) {
-            alert('녹음 파일 처리 오류: ' + e.message);
-            console.error(e);
-          } finally {
-            if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-            mediaRecorder = null; mediaStream = null;
-            recBtn.textContent = '🎙️ 녹음 시작';
-            recBtn.classList.remove('pulse-ring');
-            if (recTimerId) { clearInterval(recTimerId); recTimerId = null; }
-            recTimer.textContent = '00:00';
-            stopViz();
-          }
-        };
-
-        mediaRecorder.start();
+        // UI
         recBtn.textContent = '⏹️ 녹음 중지';
         recBtn.classList.add('pulse-ring');
-
-        // timer
         recStart = Date.now();
         recTimerId = setInterval(() => {
           const sec = (Date.now() - recStart) / 1000;
           recTimer.textContent = fmtTime(sec);
         }, 200);
 
-        // live viz (확정적으로 시작)
-        startViz(mediaStream);
+        // mediaRecorder 흉내(상태 보관)
+        mediaRecorder = { state: 'recording', _rec: rec };
 
       } catch (e) {
-        alert('마이크 권한 또는 환경 오류: ' + e.message);
         console.error(e);
+        toast('마이크 권한 또는 환경 오류로 녹음을 시작할 수 없습니다.');
         stopViz();
+        if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+        mediaRecorder = null;
       }
     } else {
-      // stop (cleanup will occur in onstop handler)
-      try { mediaRecorder.stop(); } catch (e) { console.warn('stop error:', e); }
-      if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+      // STOP & 처리
+      try {
+        const rec = mediaRecorder._rec;
+        rec.stop();
+        if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+        const blob = await rec.result(); // Blob (webm/ogg/mp4 또는 wav)
+        const url = URL.createObjectURL(blob);
+
+        recAudio.src = url; recAudio.classList.remove('hidden');
+        recStatus.classList.remove('hidden');
+
+        const arrayBuf = await blob.arrayBuffer();
+        const audioBuf = await AC.decodeAudioData(arrayBuf);
+        const srTarget = 22050;
+        let mono = toMonoFloat32(audioBuf);
+        mono = downmixSeconds(mono, audioBuf.sampleRate, 30);
+        const res = resampleMono(mono, audioBuf.sampleRate, srTarget);
+        const feats = extractFeatures(res, srTarget);
+        live = { signal: res, sr: srTarget, feats };
+        recMeta.textContent = `길이 ${fmtTime(res.length/srTarget)}, 프레임 ${feats.length}개 @ ${srTarget}Hz`;
+        compareBtn.disabled = !(ref.feats && live.feats);
+
+      } catch (e) {
+        console.error(e);
+        toast('녹음 파일 처리 중 문제가 발생했습니다.');
+      } finally {
+        mediaRecorder = null; mediaStream = null;
+        recBtn.textContent = '🎙️ 녹음 시작';
+        recBtn.classList.remove('pulse-ring');
+        if (recTimerId) { clearInterval(recTimerId); recTimerId = null; }
+        recTimer.textContent = '00:00';
+        stopViz();
+      }
     }
   });
 
@@ -564,21 +692,18 @@
 
   // --- Initial & Reset (동일 상태) ---------------------------------------
   function setInitialUIState() {
-    // 상태 초기화
     ref = { signal: null, sr: null, feats: null };
     live = { signal: null, sr: null, feats: null };
     if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
     mediaRecorder = null; mediaStream = null;
     recChunks = []; recStart = 0;
 
-    // 입력/오디오 UI
     refFile.value = '';
     refAudio.src = ''; refAudio.classList.add('hidden');
     recAudio.src = ''; recAudio.classList.add('hidden');
     refStatus.classList.add('hidden'); recStatus.classList.add('hidden');
     refMeta.textContent = ''; recMeta.textContent = '';
 
-    // 버튼/타이머
     analyzeRefBtn.disabled = true;
     compareBtn.disabled = true;
     recBtn.textContent = '🎙️ 녹음 시작';
@@ -586,23 +711,20 @@
     if (recTimerId) { clearInterval(recTimerId); recTimerId = null; }
     recTimer.textContent = '00:00';
 
-    // 점수/시각요소
     scoreEl.textContent = '--';
     updateArc(0);
     document.querySelectorAll('#stars .star').forEach(s => s.style.opacity = 0.3);
     rankEl.textContent = '대기 중…';
     explainEl.textContent = '';
 
-    // 캔버스
     syncCanvasSize();
-    stopViz(); // 내부에서 neutral paint 실행
+    stopViz();
   }
 
   resetBtn.addEventListener('click', () => {
     setInitialUIState();
   });
 
-  // 첫 로딩 시 초기 상태로 세팅
   setInitialUIState();
 
 })();
