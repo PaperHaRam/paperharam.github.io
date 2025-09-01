@@ -158,7 +158,6 @@
   function extractFeatures(signal, sampleRate, opts = {}) {
     if (!window.Meyda) throw new Error('Meyda 라이브러리를 불러오지 못했습니다.');
     const frameSize = opts.frameSize || 2048;
-    theHop = opts.hopSize || 1024; // (typo fix below uses hopSize)
     const hopSize = opts.hopSize || 1024;
 
     const featuresList = ['mfcc', 'spectralCentroid', 'spectralRolloff', 'spectralFlatness', 'zcr', 'rms'];
@@ -295,52 +294,20 @@
 
   const AC = new (window.AudioContext || window.webkitAudioContext)();
 
-  // State
-  let ref = { signal: null, sr: null, feats: null };
-  let live = { signal: null, sr: null, feats: null };
-  let mediaRecorder = null, mediaStream = null, recChunks = [], recStart = 0, recTimerId = null;
-
-  // --- Visualization (real-time waveform) --------------------------------
+  // --- Robust Visualization ----------------------------------------------
   const vizCtx = viz.getContext('2d');
-  let analyser = null, source = null;
-  let vizRAF = null;
+  let analyser = null, source = null, vizRAF = null, keepAlive = null;
 
-  function drawViz() {
-    if (!analyser) return;
-    const data = new Uint8Array(analyser.fftSize);
-    analyser.getByteTimeDomainData(data);
-    vizCtx.clearRect(0,0,viz.width,viz.height);
-    vizCtx.fillStyle = 'rgba(148,163,184,0.1)';
-    vizCtx.fillRect(0,0,viz.width,viz.height);
-    vizCtx.strokeStyle = '#93c5fd';
-    vizCtx.lineWidth = 2;
-    vizCtx.beginPath();
-    const step = data.length / viz.width;
-    for (let x = 0; x < viz.width; x++) {
-      const v = (data[Math.floor(x*step)] - 128) / 128;
-      const y = viz.height/2 + v * (viz.height/2 - 4);
-      if (x===0) vizCtx.moveTo(x,y); else vizCtx.lineTo(x,y);
-    }
-    vizCtx.stroke();
-    vizRAF = requestAnimationFrame(drawViz);
+  function syncCanvasSize() {
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = viz.clientWidth || 300;
+    const cssH = viz.clientHeight || 96;
+    const pxW = Math.max(1, Math.round(cssW * dpr));
+    const pxH = Math.max(1, Math.round(cssH * dpr));
+    if (viz.width !== pxW) viz.width = pxW;
+    if (viz.height !== pxH) viz.height = pxH;
   }
-  function resizeViz() { viz.width = viz.clientWidth * (window.devicePixelRatio || 1); viz.height = viz.clientHeight * (window.devicePixelRatio || 1); }
-  window.addEventListener('resize', resizeViz); resizeViz();
-
-  function startViz(stream) {
-    analyser = AC.createAnalyser();
-    analyser.fftSize = 1024;
-    source = AC.createMediaStreamSource(stream);
-    source.connect(analyser);
-    if (vizRAF) cancelAnimationFrame(vizRAF);
-    vizRAF = requestAnimationFrame(drawViz);
-  }
-  function stopViz() {
-    if (vizRAF) cancelAnimationFrame(vizRAF);
-    vizRAF = null;
-    analyser = null;
-    source = null;
-    // clear canvas to neutral line
+  function paintNeutral() {
     vizCtx.clearRect(0,0,viz.width,viz.height);
     vizCtx.fillStyle = 'rgba(148,163,184,0.1)';
     vizCtx.fillRect(0,0,viz.width,viz.height);
@@ -351,6 +318,84 @@
     vizCtx.lineTo(viz.width, viz.height/2);
     vizCtx.stroke();
   }
+
+  function drawViz() {
+    if (!analyser) return;
+    const buf = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(buf);
+
+    vizCtx.clearRect(0,0,viz.width,viz.height);
+    vizCtx.fillStyle = 'rgba(148,163,184,0.1)';
+    vizCtx.fillRect(0,0,viz.width,viz.height);
+    vizCtx.strokeStyle = '#93c5fd';
+    vizCtx.lineWidth = 2;
+    vizCtx.beginPath();
+
+    const step = buf.length / viz.width;
+    let sumVar = 0;
+    for (let x = 0; x < viz.width; x++) {
+      const v = (buf[Math.floor(x * step)] - 128) / 128;
+      const y = viz.height/2 + v * (viz.height/2 - 4);
+      if (x === 0) vizCtx.moveTo(x, y); else vizCtx.lineTo(x, y);
+      sumVar += Math.abs(v);
+    }
+    vizCtx.stroke();
+
+    // 평탄(데이터 128 근처만)하면 자동 복구 시도
+    if (sumVar / viz.width < 0.002) {
+      if (AC.state !== 'running') AC.resume().catch(()=>{});
+      // 연결 재시도
+      if (mediaStream && (!source || !analyser)) {
+        try { startViz(mediaStream, true); } catch(_) {}
+      }
+    }
+
+    vizRAF = requestAnimationFrame(drawViz);
+  }
+
+  function startViz(stream, rebind = false) {
+    syncCanvasSize();
+    if (vizRAF) { cancelAnimationFrame(vizRAF); vizRAF = null; }
+    try { if (rebind && source) source.disconnect(); } catch(_) {}
+    try { if (rebind && analyser) analyser.disconnect(); } catch(_) {}
+    try { if (rebind && keepAlive) keepAlive.disconnect(); } catch(_) {}
+
+    analyser = AC.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.85;
+    analyser.minDecibels = -90;
+    analyser.maxDecibels = -10;
+
+    source = AC.createMediaStreamSource(stream);
+    keepAlive = AC.createGain();
+    keepAlive.gain.value = 0.0;
+
+    // source -> keepAlive -> analyser (destination에는 연결하지 않음)
+    source.connect(keepAlive);
+    keepAlive.connect(analyser);
+
+    vizRAF = requestAnimationFrame(drawViz);
+  }
+
+  function stopViz() {
+    if (vizRAF) { cancelAnimationFrame(vizRAF); vizRAF = null; }
+    try { if (source) source.disconnect(); } catch(_) {}
+    try { if (analyser) analyser.disconnect(); } catch(_) {}
+    try { if (keepAlive) keepAlive.disconnect(); } catch(_) {}
+    analyser = null; source = null; keepAlive = null;
+    syncCanvasSize();
+    paintNeutral();
+  }
+
+  window.addEventListener('resize', () => {
+    syncCanvasSize();
+    if (analyser && !vizRAF) vizRAF = requestAnimationFrame(drawViz);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && AC.state !== 'running') {
+      AC.resume().catch(()=>{});
+    }
+  });
 
   // --- File handling -----------------------------------------------------
   refFile.addEventListener('change', () => {
@@ -393,10 +438,19 @@
     if (!mediaRecorder || mediaRecorder.state === 'inactive') {
       // start
       try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        try { await AC.resume(); } catch(_) {}
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: false
+          }
+        });
+
         mediaRecorder = new MediaRecorder(mediaStream);
         recChunks = [];
         mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
+
         mediaRecorder.onstop = async () => {
           try {
             const blob = new Blob(recChunks, { type: (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : 'audio/webm' });
@@ -419,7 +473,6 @@
             alert('녹음 파일 처리 오류: ' + e.message);
             console.error(e);
           } finally {
-            // Cleanup & UI reset after processing (single place)
             if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
             mediaRecorder = null; mediaStream = null;
             recBtn.textContent = '🎙️ 녹음 시작';
@@ -429,6 +482,7 @@
             stopViz();
           }
         };
+
         mediaRecorder.start();
         recBtn.textContent = '⏹️ 녹음 중지';
         recBtn.classList.add('pulse-ring');
@@ -440,12 +494,13 @@
           recTimer.textContent = fmtTime(sec);
         }, 200);
 
-        // live viz
+        // live viz (확정적으로 시작)
         startViz(mediaStream);
 
       } catch (e) {
         alert('마이크 권한 또는 환경 오류: ' + e.message);
         console.error(e);
+        stopViz();
       }
     } else {
       // stop (cleanup will occur in onstop handler)
@@ -507,27 +562,49 @@
     }
   });
 
-  // --- Reset -------------------------------------------------------------
-  resetBtn.addEventListener('click', () => {
+  // --- Initial & Reset (동일 상태) ---------------------------------------
+  function setInitialUIState() {
+    // 상태 초기화
     ref = { signal: null, sr: null, feats: null };
     live = { signal: null, sr: null, feats: null };
     if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
     mediaRecorder = null; mediaStream = null;
+    recChunks = []; recStart = 0;
+
+    // 입력/오디오 UI
     refFile.value = '';
     refAudio.src = ''; refAudio.classList.add('hidden');
     recAudio.src = ''; recAudio.classList.add('hidden');
     refStatus.classList.add('hidden'); recStatus.classList.add('hidden');
     refMeta.textContent = ''; recMeta.textContent = '';
-    compareBtn.disabled = true; analyzeRefBtn.disabled = true;
+
+    // 버튼/타이머
+    analyzeRefBtn.disabled = true;
+    compareBtn.disabled = true;
+    recBtn.textContent = '🎙️ 녹음 시작';
+    recBtn.classList.remove('pulse-ring');
+    if (recTimerId) { clearInterval(recTimerId); recTimerId = null; }
+    recTimer.textContent = '00:00';
+
+    // 점수/시각요소
     scoreEl.textContent = '--';
     updateArc(0);
     document.querySelectorAll('#stars .star').forEach(s => s.style.opacity = 0.3);
     rankEl.textContent = '대기 중…';
     explainEl.textContent = '';
-    if (recTimerId) { clearInterval(recTimerId); recTimerId = null; }
-    recTimer.textContent = '00:00';
-    stopViz();
+
+    // 캔버스
+    syncCanvasSize();
+    stopViz(); // 내부에서 neutral paint 실행
+  }
+
+  resetBtn.addEventListener('click', () => {
+    setInitialUIState();
   });
+
+  // 첫 로딩 시 초기 상태로 세팅
+  setInitialUIState();
+
 })();
 </script>
 </body>
